@@ -37,7 +37,7 @@
             .canvas-container { height: 220px; }
             button { padding: 10px 5px; font-size: 13px; }
         }
-        #custom-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 15px 25px; border-radius: 10px; display: none; z-index: 2000; }
+        #custom-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 15px 25px; border-radius: 10px; display: none; z-index: 2000; max-width: 92vw; word-break: break-word; }
         .loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.85); display: none; justify-content: center; align-items: center; z-index: 1000; font-size: 1.1em; color: #3a3a3c; }
     </style>
 </head>
@@ -85,9 +85,12 @@
         // =================================================================
         const CLIENT_ID   = 'a32e7b4f-e3bc-4159-a263-e8635913883f';
         const TENANT_ID   = '557a1aa9-bfba-4d4c-890c-bffe9c5d47a2';
-        const SITE_PATH   = 'plumsystems.sharepoint.com:/sites/e:';
-        const LIST_NAME   = 'EventList';
-        const SIGN_FOLDER = '実施確認サイン';  // 署名PNGの保存先フォルダ
+        const SITE_PATH   = 'plumsystems.sharepoint.com:/sites/e:'; // このままでOK
+        const LIST_NAME   = 'EventList';                            // SharePointのリスト表示名
+        const SIGN_FOLDER = '実施確認サイン';                       // 署名PNGの保存先フォルダ（SharePointドキュメントライブラリ内）
+
+        // ★ Graphは表示名だと不安定なので、起動時にLIST_IDを解決して使う
+        let LIST_ID = null;
 
         // =================================================================
         // MSAL認証
@@ -143,6 +146,16 @@
         }
 
         // =================================================================
+        // LIST_ID解決（displayName → id）
+        // =================================================================
+        async function resolveListId() {
+            const res = await callGraph(`/sites/${SITE_PATH}/lists?$select=id,displayName`);
+            const hit = res.value.find(x => x.displayName === LIST_NAME);
+            if (!hit) throw new Error(`SharePoint list "${LIST_NAME}" が見つかりません`);
+            LIST_ID = hit.id;
+        }
+
+        // =================================================================
         // イベント一覧取得（GASのgetData()に相当）
         // =================================================================
         async function loadEvents() {
@@ -154,7 +167,8 @@
 
             // SharePointリストから全件取得（CSVインポートで±2ヶ月に絞られている前提）
             let allItems = [];
-            let endpoint = `/sites/${SITE_PATH}/lists/${LIST_NAME}/items?expand=fields&$top=500`;
+            let endpoint = `/sites/${SITE_PATH}/lists/${LIST_ID}/items?expand=fields&$top=500`;
+
             while (endpoint) {
                 const res = await callGraph(endpoint);
                 allItems = allItems.concat(res.value);
@@ -165,7 +179,7 @@
 
             // 前後1週間でフィルタ
             const filtered = allItems.filter(item => {
-                if (!item.fields.EventDate || !item.fields.SchoolName) return false;
+                if (!item.fields || !item.fields.EventDate || !item.fields.SchoolName) return false;
                 const d = new Date(item.fields.EventDate);
                 return d >= oneWeekAgo && d <= oneWeekLater;
             });
@@ -204,6 +218,9 @@
                 await msalInstance.initialize();
                 await msalInstance.handleRedirectPromise();
 
+                // ★ listId解決（これがないと読み込みが止まることがある）
+                await resolveListId();
+
                 const { events, todayEventIndex } = await loadEvents();
                 const sel = document.getElementById('event-select');
                 sel.innerHTML = '<option value="">-- 選択してください --</option>';
@@ -218,7 +235,10 @@
                     sel.innerHTML = '<option value="">前後1週間のイベントがありません</option>';
                 }
             } catch (e) {
-                alert('データの読み込みに失敗しました。\n' + e.message);
+                console.error(e);
+                const msg = '読み込み失敗: ' + (e.message || e);
+                $('#custom-toast').html(msg).show();
+                alert('データの読み込みに失敗しました。\n' + (e.message || e));
             } finally {
                 $('#loading').hide();
             }
@@ -234,7 +254,7 @@
 
         function showMessage(msg) {
             $('#custom-toast').html(msg).fadeIn(200);
-            setTimeout(() => { $('#custom-toast').fadeOut(200); }, 2000);
+            setTimeout(() => { $('#custom-toast').fadeOut(200); }, 2200);
         }
 
         function goToTop() {
@@ -310,7 +330,7 @@
         });
 
         // =================================================================
-        // 保存処理（GASのuploadSignatureToDrive + markEventsAsSignedに相当）
+        // 保存処理（upload + IsSigned更新）
         // =================================================================
         $('#save-btn').on('click', async function () {
             if (drawingHistory.length <= 1) return showMessage('サインしてください');
@@ -326,11 +346,16 @@
 
                 const base64 = transparentCanvas.toDataURL('image/png').split(',')[1];
                 const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-                const fileName = `サイン_${currentEvent.display.replace(/[\s/：（）　]/g, '_')}_${Date.now()}.png`;
+
+                const rawFileName = `サイン_${currentEvent.display.replace(/[\s/：（）　]/g, '_')}_${Date.now()}.png`;
+
+                // ★ 日本語フォルダ/ファイル名はURLエンコードして安全に
+                const folder = encodeURIComponent(SIGN_FOLDER);
+                const fileName = encodeURIComponent(rawFileName);
 
                 // ① 署名PNGをSharePointフォルダにアップロード
                 await callGraph(
-                    `/sites/${SITE_PATH}/drive/root:/${SIGN_FOLDER}/${fileName}:/content`,
+                    `/sites/${SITE_PATH}/drive/root:/${folder}/${fileName}:/content`,
                     'PUT',
                     binary,
                     'image/png'
@@ -339,7 +364,7 @@
                 // ② EventListの該当アイテムをIsSigned=trueに更新
                 await Promise.all(currentEvent.rowIds.map(id =>
                     callGraph(
-                        `/sites/${SITE_PATH}/lists/${LIST_NAME}/items/${id}`,
+                        `/sites/${SITE_PATH}/lists/${LIST_ID}/items/${id}`,
                         'PATCH',
                         { fields: { IsSigned: true } }
                     )
@@ -349,7 +374,7 @@
                 $('#complete-overlay').css('display', 'flex');
             } catch (e) {
                 $('#loading').hide();
-                showMessage('エラーが発生しました: ' + e.message);
+                showMessage('エラーが発生しました: ' + (e.message || e));
                 console.error(e);
             }
         });
