@@ -1,26 +1,31 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <base target="_top">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+
+  <!-- MSAL -->
   <script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
   <title>実施確認サイン</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; background-color: #f2f2f7; height: 100vh; display: flex; flex-direction: column; }
     header { background-color: #1c1c1e; color: white; padding: 12px; text-align: center; font-size: 1.1em; font-weight: bold; flex-shrink: 0; }
     .container { flex: 1; padding: 10px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
     .screen { background-color: white; border-radius: 12px; padding: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); display: flex; flex-direction: column; min-height: fit-content; }
     #selection-screen { justify-content: center; align-items: center; min-height: 300px; }
     .selection-box { width: 100%; max-width: 500px; text-align: center; }
     h3 { margin: 0 0 10px 0; font-size: 1.1em; color: #3a3a3c; }
     select { width: 100%; padding: 12px; margin: 10px 0 20px 0; border: 1px solid #d1d1d6; border-radius: 8px; font-size: 16px; background: #fff; }
+
     #signature-screen { display: none; }
     #event-info { font-size: 0.9em; font-weight: 600; margin-bottom: 8px; color: #007aff; border-bottom: 1px solid #e5e5ea; padding-bottom: 5px; }
     .canvas-container { position: relative; border: 1px solid #3a3a3c; border-radius: 8px; background: transparent; height: 250px; margin-bottom: 10px; }
     canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+
     .controls { display: flex; gap: 8px; justify-content: center; width: 100%; padding-bottom: 5px; }
     button { padding: 12px 15px; font-size: 14px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
     button:active { opacity: 0.7; }
@@ -29,359 +34,404 @@
     #clear-btn { background-color: #ff3b30; color: white; flex: 1; }
     #undo-btn { background-color: #ff9500; color: white; flex: 1; }
     #save-btn { background-color: #34c759; color: white; flex: 1.2; }
+
     #complete-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); display: none; justify-content: center; align-items: center; z-index: 3000; }
     .complete-card { background: white; padding: 25px; border-radius: 16px; width: 85%; max-width: 320px; text-align: center; }
     .done-btn { background-color: #007aff; color: white; width: 100%; padding: 12px; border-radius: 8px; margin-top: 15px; }
-    #custom-toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.85); color: white; padding: 15px 25px; border-radius: 10px; display: none; z-index: 2000; max-width: 92vw; word-break: break-word; }
+
     .loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.85); display: none; justify-content: center; align-items: center; z-index: 1000; font-size: 1.1em; color: #3a3a3c; }
+
+    /* ★診断表示（必ず出る） */
+    #statusBox {
+      position: fixed;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      background: rgba(0,0,0,0.86);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.35;
+      z-index: 9999;
+      max-height: 35vh;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
   </style>
 </head>
+
 <body>
-  <header>実施確認サイン</header>
+<header>実施確認サイン</header>
 
-  <div class="container">
-    <div id="loading" class="loading">処理中...</div>
-    <div id="custom-toast"></div>
+<div class="container">
+  <div id="loading" class="loading">処理中...</div>
 
-    <div id="complete-overlay">
-      <div class="complete-card">
-        <h2>登録完了</h2>
-        <p>サインを保存しました。</p>
-        <button class="done-btn" onclick="goToTop()">トップに戻る</button>
-      </div>
-    </div>
-
-    <div id="selection-screen" class="screen">
-      <div class="selection-box">
-        <h3>イベントを選択</h3>
-        <select id="event-select">
-          <option value="">-- 読み込み中... --</option>
-        </select>
-        <button id="confirm-btn">確認してサイン画面へ</button>
-      </div>
-    </div>
-
-    <div id="signature-screen" class="screen">
-      <div id="event-info"></div>
-      <div class="canvas-container">
-        <canvas id="signatureCanvas"></canvas>
-      </div>
-      <div class="controls">
-        <button class="back-btn" onclick="goToTop()">戻る</button>
-        <button id="clear-btn">消去</button>
-        <button id="undo-btn">1画戻す</button>
-        <button id="save-btn">保存終了</button>
-      </div>
+  <div id="complete-overlay">
+    <div class="complete-card">
+      <h2>登録完了</h2>
+      <p>サインを保存しました。</p>
+      <button class="done-btn" id="done-btn">トップに戻る</button>
     </div>
   </div>
 
-  <script>
-    // =================================================================
-    // 設定
-    // =================================================================
-    const CLIENT_ID   = 'a32e7b4f-e3bc-4159-a263-e8635913883f';
-    const TENANT_ID   = '557a1aa9-bfba-4d4c-890c-bffe9c5d47a2';
-    const SITE_PATH   = 'plumsystems.sharepoint.com:/sites/e:';
-    const LIST_NAME   = 'EventList';
-    const SIGN_FOLDER = '実施確認サイン';
+  <div id="selection-screen" class="screen">
+    <div class="selection-box">
+      <h3>イベントを選択</h3>
+      <select id="event-select">
+        <option value="">-- 読み込み中... --</option>
+      </select>
+      <button id="confirm-btn">確認してサイン画面へ</button>
+    </div>
+  </div>
 
-    let LIST_ID = null;
+  <div id="signature-screen" class="screen">
+    <div id="event-info"></div>
+    <div class="canvas-container">
+      <canvas id="signatureCanvas"></canvas>
+    </div>
+    <div class="controls">
+      <button class="back-btn" id="back-btn">戻る</button>
+      <button id="clear-btn">消去</button>
+      <button id="undo-btn">1画戻す</button>
+      <button id="save-btn">保存終了</button>
+    </div>
+  </div>
+</div>
 
-    function showMessage(msg) {
-      $('#custom-toast').stop(true, true).html(msg).fadeIn(150);
-      // 消したくなければここをコメントアウト
-      // setTimeout(() => { $('#custom-toast').fadeOut(200); }, 4500);
+<div id="statusBox">起動: waiting...</div>
+
+<script>
+  // ================================================================
+  // 設定
+  // ================================================================
+  const CLIENT_ID   = 'a32e7b4f-e3bc-4159-a263-e8635913883f';
+  const TENANT_ID   = '557a1aa9-bfba-4d4c-890c-bffe9c5d47a2';
+  const SITE_PATH   = 'plumsystems.sharepoint.com:/sites/e:';
+  const LIST_NAME   = 'EventList';
+  const SIGN_FOLDER = '実施確認サイン';
+
+  // ================================================================
+  // UI Helpers
+  // ================================================================
+  const $ = (sel) => document.querySelector(sel);
+  const statusBox = $('#statusBox');
+  function logStatus(msg) {
+    statusBox.textContent += "\n" + msg;
+  }
+  function showLoading(on) {
+    $('#loading').style.display = on ? 'flex' : 'none';
+  }
+  function goToTop() {
+    $('#complete-overlay').style.display = 'none';
+    $('#signature-screen').style.display = 'none';
+    $('#selection-screen').style.display = 'flex';
+    window.scrollTo(0, 0);
+  }
+
+  // ================================================================
+  // Start
+  // ================================================================
+  window.addEventListener('DOMContentLoaded', () => {
+    statusBox.textContent = "起動: DOMContentLoaded";
+    if (typeof window.msal === 'undefined') {
+      logStatus("NG: msal が読み込めていません（msal is undefined）");
+      logStatus("→ 社内ネットワーク/拡張機能で alcdn.msauth.net がブロックされている可能性");
+      return;
     }
+    logStatus("OK: msal 読み込み確認");
+    startApp().catch(e => {
+      console.error(e);
+      logStatus("致命的エラー: " + (e.message || e));
+    });
+  });
 
-    function goToTop() {
-      $('#complete-overlay').hide();
-      $('#signature-screen').hide();
-      $('#selection-screen').show();
-      window.scrollTo(0, 0);
+  // ================================================================
+  // MSAL / Graph
+  // ================================================================
+  const msalInstance = new msal.PublicClientApplication({
+    auth: {
+      clientId: CLIENT_ID,
+      authority: `https://login.microsoftonline.com/${TENANT_ID}`,
+      redirectUri: window.location.origin + window.location.pathname
+    },
+    cache: { cacheLocation: 'sessionStorage' }
+  });
+
+  const SCOPES = { scopes: ['Sites.ReadWrite.All', 'Files.ReadWrite.All'] };
+
+  async function getToken() {
+    const accounts = msalInstance.getAllAccounts();
+    if (accounts.length === 0) {
+      logStatus("認証: loginPopup 開始");
+      await msalInstance.loginPopup(SCOPES);
+      logStatus("認証: loginPopup 完了");
     }
+    try {
+      const res = await msalInstance.acquireTokenSilent({
+        ...SCOPES,
+        account: msalInstance.getAllAccounts()[0]
+      });
+      logStatus("トークン: acquireTokenSilent OK");
+      return res.accessToken;
+    } catch (e) {
+      logStatus("トークン: acquireTokenSilent NG → acquireTokenPopup");
+      const res = await msalInstance.acquireTokenPopup(SCOPES);
+      logStatus("トークン: acquireTokenPopup OK");
+      return res.accessToken;
+    }
+  }
 
-    // =================================================================
-    // 起動（DOMができてから）
-    // =================================================================
-    window.addEventListener('DOMContentLoaded', () => {
-      if (typeof window.msal === 'undefined') {
-        showMessage('MSALが読み込めていません（msal is undefined）。ネットワーク/拡張機能でブロックの可能性。');
-        return;
-      }
-      initializeApp();
+  async function callGraph(endpoint, method = 'GET', body = null, contentType = 'application/json') {
+    const token = await getToken();
+    const headers = { 'Authorization': `Bearer ${token}` };
+    if (body !== null) headers['Content-Type'] = contentType;
+
+    const res = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
+      method,
+      headers,
+      body: body !== null ? (contentType === 'application/json' ? JSON.stringify(body) : body) : null
     });
 
-    // =================================================================
-    // MSAL認証
-    // =================================================================
-    const msalInstance = new msal.PublicClientApplication({
-      auth: {
-        clientId: CLIENT_ID,
-        authority: `https://login.microsoftonline.com/${TENANT_ID}`,
-        redirectUri: window.location.origin + window.location.pathname
-      },
-      cache: { cacheLocation: 'sessionStorage' }
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Graph API ${res.status}: ${err}`);
+    }
+    if (method === 'PUT' || res.status === 204) return null;
+    return res.json();
+  }
+
+  // ================================================================
+  // Data: resolve list id & load events
+  // ================================================================
+  let LIST_ID = null;
+
+  async function resolveListId() {
+    logStatus("listId: resolve 開始");
+    const res = await callGraph(`/sites/${SITE_PATH}/lists?$select=id,displayName`);
+    const hit = (res.value || []).find(x => x.displayName === LIST_NAME);
+    if (!hit) throw new Error(`SharePoint list "${LIST_NAME}" が見つかりません`);
+    LIST_ID = hit.id;
+    logStatus("listId: OK = " + LIST_ID);
+  }
+
+  async function loadEvents() {
+    logStatus("events: load 開始");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
+    const oneWeekAgo  = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneWeekLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    let allItems = [];
+    let endpoint = `/sites/${SITE_PATH}/lists/${LIST_ID}/items?expand=fields&$top=500`;
+
+    while (endpoint) {
+      const res = await callGraph(endpoint);
+      allItems = allItems.concat(res.value || []);
+      endpoint = res['@odata.nextLink']
+        ? res['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0', '')
+        : null;
+    }
+    logStatus("events: items total = " + allItems.length);
+
+    const filtered = allItems.filter(item => {
+      if (!item.fields || !item.fields.EventDate || !item.fields.SchoolName) return false;
+      const d = new Date(item.fields.EventDate);
+      return d >= oneWeekAgo && d <= oneWeekLater;
+    });
+    logStatus("events: filtered(±1w) = " + filtered.length);
+
+    const grouped = {};
+    filtered.forEach(item => {
+      const f = item.fields;
+      const dateStr = new Date(f.EventDate).toISOString().split('T')[0];
+      const schoolName = (f.SchoolName || '').trim()
+        .replace(/[\u2460-\u2473]/g, '')
+        .replace(/[\uff08\uff09]/g, '')
+        .trim();
+      const eventId = `${dateStr}_${schoolName}`;
+      if (!grouped[eventId]) grouped[eventId] = { id: eventId, date: dateStr, name: schoolName, rowIds: [], count: 0 };
+      grouped[eventId].rowIds.push(item.id);
+      grouped[eventId].count++;
     });
 
-    const SCOPES = { scopes: ['Sites.ReadWrite.All', 'Files.ReadWrite.All'] };
+    const events = Object.values(grouped)
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map(e => { e.display = `${e.date}　${e.name}（${e.count}講座）`; return e; });
 
-    async function getToken() {
-      const accounts = msalInstance.getAllAccounts();
-      if (accounts.length === 0) {
-        await msalInstance.loginPopup(SCOPES);
-      }
-      try {
-        const res = await msalInstance.acquireTokenSilent({
-          ...SCOPES,
-          account: msalInstance.getAllAccounts()[0]
-        });
-        return res.accessToken;
-      } catch (e) {
-        const res = await msalInstance.acquireTokenPopup(SCOPES);
-        return res.accessToken;
-      }
-    }
+    const todayEventIndex = events.findIndex(e => e.date === todayStr);
+    logStatus("events: grouped = " + events.length);
 
-    // =================================================================
-    // Graph API 呼び出し
-    // =================================================================
-    async function callGraph(endpoint, method = 'GET', body = null, contentType = 'application/json') {
-      const token = await getToken();
-      const headers = { 'Authorization': `Bearer ${token}` };
-      if (body !== null) headers['Content-Type'] = contentType;
+    return { events, todayEventIndex };
+  }
 
-      const res = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
-        method,
-        headers,
-        body: body !== null ? (contentType === 'application/json' ? JSON.stringify(body) : body) : null
-      });
+  // ================================================================
+  // Canvas
+  // ================================================================
+  let currentEvent = null;
+  const canvas = $('#signatureCanvas');
+  const ctx = canvas.getContext('2d');
+  let isDrawing = false, lastX = 0, lastY = 0, drawingHistory = [];
 
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Graph API ${res.status}: ${err}`);
-      }
-      if (method === 'PUT' || res.status === 204) return null;
-      return res.json();
-    }
+  function resizeCanvas() {
+    const container = canvas.parentElement;
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+    clearCanvas();
+  }
+  function saveState() {
+    drawingHistory.push(canvas.toDataURL());
+    if (drawingHistory.length > 25) drawingHistory.shift();
+  }
+  function clearCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
+    drawingHistory = [];
+    saveState();
+  }
+  function getCoords(e) {
+    const r = canvas.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return [p.clientX - r.left, p.clientY - r.top];
+  }
 
-    // =================================================================
-    // listId 解決（displayName → id）
-    // =================================================================
-    async function resolveListId() {
-      const res = await callGraph(`/sites/${SITE_PATH}/lists?$select=id,displayName`);
-      const hit = (res.value || []).find(x => x.displayName === LIST_NAME);
-      if (!hit) throw new Error(`SharePoint list "${LIST_NAME}" が見つかりません`);
-      LIST_ID = hit.id;
-    }
+  // ================================================================
+  // App
+  // ================================================================
+  async function startApp() {
+    showLoading(true);
+    try {
+      logStatus("msal: initialize...");
+      await msalInstance.initialize();
+      await msalInstance.handleRedirectPromise();
+      logStatus("msal: initialize OK");
 
-    // =================================================================
-    // イベント一覧取得
-    // =================================================================
-    async function loadEvents() {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const todayStr = today.toISOString().split('T')[0];
-      const oneWeekAgo  = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-      const oneWeekLater = new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000);
+      await resolveListId();
 
-      let allItems = [];
-      let endpoint = `/sites/${SITE_PATH}/lists/${LIST_ID}/items?expand=fields&$top=500`;
+      const { events, todayEventIndex } = await loadEvents();
+      const sel = $('#event-select');
+      sel.innerHTML = '';
 
-      while (endpoint) {
-        const res = await callGraph(endpoint);
-        allItems = allItems.concat(res.value || []);
-        endpoint = res['@odata.nextLink']
-          ? res['@odata.nextLink'].replace('https://graph.microsoft.com/v1.0', '')
-          : null;
-      }
+      if (!events || events.length === 0) {
+        sel.innerHTML = '<option value="">前後1週間のイベントがありません</option>';
+      } else {
+        const first = document.createElement('option');
+        first.value = '';
+        first.textContent = '-- 選択してください --';
+        sel.appendChild(first);
 
-      const filtered = allItems.filter(item => {
-        if (!item.fields || !item.fields.EventDate || !item.fields.SchoolName) return false;
-        const d = new Date(item.fields.EventDate);
-        return d >= oneWeekAgo && d <= oneWeekLater;
-      });
-
-      const grouped = {};
-      filtered.forEach(item => {
-        const f = item.fields;
-        const dateStr = new Date(f.EventDate).toISOString().split('T')[0];
-        const schoolName = (f.SchoolName || '').trim()
-          .replace(/[\u2460-\u2473]/g, '')
-          .replace(/[\uff08\uff09]/g, '')
-          .trim();
-        const eventId = `${dateStr}_${schoolName}`;
-        if (!grouped[eventId]) {
-          grouped[eventId] = { id: eventId, date: dateStr, name: schoolName, rowIds: [], count: 0 };
-        }
-        grouped[eventId].rowIds.push(item.id);
-        grouped[eventId].count++;
-      });
-
-      const events = Object.values(grouped)
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
-        .map(e => { e.display = `${e.date}　${e.name}（${e.count}講座）`; return e; });
-
-      const todayEventIndex = events.findIndex(e => e.date === todayStr);
-      return { events, todayEventIndex };
-    }
-
-    // =================================================================
-    // 初期化
-    // =================================================================
-    async function initializeApp() {
-      $('#loading').css('display', 'flex');
-      try {
-        await msalInstance.initialize();
-        await msalInstance.handleRedirectPromise();
-
-        await resolveListId();
-
-        const { events, todayEventIndex } = await loadEvents();
-        const sel = document.getElementById('event-select');
-        sel.innerHTML = '<option value="">-- 選択してください --</option>';
-
-        (events || []).forEach((ev, i) => {
+        events.forEach((ev, i) => {
           const opt = document.createElement('option');
           opt.value = JSON.stringify(ev);
           opt.textContent = ev.display;
           if (i === todayEventIndex) opt.selected = true;
           sel.appendChild(opt);
         });
-
-        if (!events || events.length === 0) {
-          sel.innerHTML = '<option value="">前後1週間のイベントがありません</option>';
-        }
-      } catch (e) {
-        console.error(e);
-        showMessage('読み込み失敗: ' + (e.message || e));
-      } finally {
-        $('#loading').hide();
       }
+
+      logStatus("UI: プルダウン反映 OK");
+    } catch (e) {
+      console.error(e);
+      logStatus("エラー: " + (e.message || e));
+    } finally {
+      showLoading(false);
     }
+  }
 
-    // =================================================================
-    // Canvas サインパッド
-    // =================================================================
-    let currentEvent = null;
-    const canvas = document.getElementById('signatureCanvas');
-    const ctx = canvas.getContext('2d');
-    let isDrawing = false, lastX = 0, lastY = 0, drawingHistory = [];
+  // UI events
+  $('#done-btn').addEventListener('click', goToTop);
+  $('#back-btn').addEventListener('click', goToTop);
 
-    function resizeCanvas() {
-      const container = canvas.parentElement;
-      canvas.width = container.clientWidth;
-      canvas.height = container.clientHeight;
-      clearCanvas();
+  $('#confirm-btn').addEventListener('click', () => {
+    const v = $('#event-select').value;
+    if (!v) { logStatus("UI: イベント未選択"); return; }
+    currentEvent = JSON.parse(v);
+    $('#event-info').textContent = `対象: ${currentEvent.display}`;
+    $('#selection-screen').style.display = 'none';
+    $('#signature-screen').style.display = 'flex';
+    resizeCanvas();
+  });
+
+  canvas.addEventListener('mousedown', (e) => { isDrawing = true; [lastX, lastY] = getCoords(e); });
+  canvas.addEventListener('mousemove', (e) => {
+    if (!isDrawing) return;
+    const [x, y] = getCoords(e);
+    ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
+    [lastX, lastY] = [x, y];
+  });
+  canvas.addEventListener('mouseup', () => { if (isDrawing) saveState(); isDrawing = false; });
+  canvas.addEventListener('mouseout', () => { if (isDrawing) saveState(); isDrawing = false; });
+
+  canvas.addEventListener('touchstart', (e) => { e.preventDefault(); isDrawing = true; [lastX, lastY] = getCoords(e); }, { passive:false });
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    const [x, y] = getCoords(e);
+    ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
+    [lastX, lastY] = [x, y];
+  }, { passive:false });
+  canvas.addEventListener('touchend', () => { if (isDrawing) saveState(); isDrawing = false; });
+
+  $('#clear-btn').addEventListener('click', clearCanvas);
+  $('#undo-btn').addEventListener('click', () => {
+    if (drawingHistory.length <= 1) return clearCanvas();
+    drawingHistory.pop();
+    const img = new Image();
+    img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
+    img.src = drawingHistory[drawingHistory.length - 1];
+  });
+
+  $('#save-btn').addEventListener('click', async () => {
+    if (drawingHistory.length <= 1) { logStatus("保存: サイン未入力"); return; }
+    showLoading(true);
+    try {
+      const t = document.createElement('canvas');
+      t.width = canvas.width; t.height = canvas.height;
+      t.getContext('2d').drawImage(canvas, 0, 0);
+
+      const base64 = t.toDataURL('image/png').split(',')[1];
+      const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const rawFileName = `サイン_${currentEvent.display.replace(/[\s/：（）　]/g, '_')}_${Date.now()}.png`;
+
+      const folder = encodeURIComponent(SIGN_FOLDER);
+      const fileName = encodeURIComponent(rawFileName);
+
+      logStatus("保存: PNG upload 開始");
+      await callGraph(
+        `/sites/${SITE_PATH}/drive/root:/${folder}/${fileName}:/content`,
+        'PUT',
+        binary,
+        'image/png'
+      );
+      logStatus("保存: PNG upload OK");
+
+      logStatus("保存: IsSigned 更新開始");
+      await Promise.all(currentEvent.rowIds.map(id =>
+        callGraph(
+          `/sites/${SITE_PATH}/lists/${LIST_ID}/items/${id}`,
+          'PATCH',
+          { fields: { IsSigned: true } }
+        )
+      ));
+      logStatus("保存: IsSigned 更新OK");
+
+      $('#complete-overlay').style.display = 'flex';
+    } catch (e) {
+      console.error(e);
+      logStatus("保存エラー: " + (e.message || e));
+    } finally {
+      showLoading(false);
     }
+  });
 
-    function saveState() {
-      drawingHistory.push(canvas.toDataURL());
-      if (drawingHistory.length > 25) drawingHistory.shift();
-    }
-
-    function clearCanvas() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
-      drawingHistory = [];
-      saveState();
-    }
-
-    function getCoords(e) {
-      const r = canvas.getBoundingClientRect();
-      let cx = e.touches ? e.touches[0].clientX : e.clientX;
-      let cy = e.touches ? e.touches[0].clientY : e.clientY;
-      return [cx - r.left, cy - r.top];
-    }
-
-    $('#confirm-btn').on('click', function () {
-      const v = $('#event-select').val();
-      if (!v) return showMessage('イベントを選択してください');
-      currentEvent = JSON.parse(v);
-      $('#event-info').text(`対象: ${currentEvent.display}`);
-      $('#selection-screen').hide();
-      $('#signature-screen').css('display', 'flex');
-      resizeCanvas();
-    });
-
-    $(canvas).on('mousedown touchstart', e => {
-      isDrawing = true;
-      [lastX, lastY] = getCoords(e);
-      if (e.touches) e.preventDefault();
-    });
-
-    $(canvas).on('mousemove touchmove', e => {
-      if (!isDrawing) return;
-      if (e.touches) e.preventDefault();
-      const [x, y] = getCoords(e);
-      ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(x, y); ctx.stroke();
-      [lastX, lastY] = [x, y];
-    });
-
-    $(canvas).on('mouseup touchend mouseout touchcancel', () => {
-      if (isDrawing) saveState();
-      isDrawing = false;
-    });
-
-    $('#clear-btn').on('click', clearCanvas);
-    $('#undo-btn').on('click', () => {
-      if (drawingHistory.length <= 1) return clearCanvas();
-      drawingHistory.pop();
-      const img = new Image();
-      img.onload = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); ctx.drawImage(img, 0, 0); };
-      img.src = drawingHistory[drawingHistory.length - 1];
-    });
-
-    // =================================================================
-    // 保存（PNGアップロード + IsSigned更新）
-    // =================================================================
-    $('#save-btn').on('click', async function () {
-      if (drawingHistory.length <= 1) return showMessage('サインしてください');
-      $('#loading').css('display', 'flex');
-
-      try {
-        const transparentCanvas = document.createElement('canvas');
-        transparentCanvas.width = canvas.width;
-        transparentCanvas.height = canvas.height;
-        const tCtx = transparentCanvas.getContext('2d');
-        tCtx.drawImage(canvas, 0, 0);
-
-        const base64 = transparentCanvas.toDataURL('image/png').split(',')[1];
-        const binary = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-        const rawFileName = `サイン_${currentEvent.display.replace(/[\s/：（）　]/g, '_')}_${Date.now()}.png`;
-
-        const folder = encodeURIComponent(SIGN_FOLDER);
-        const fileName = encodeURIComponent(rawFileName);
-
-        await callGraph(
-          `/sites/${SITE_PATH}/drive/root:/${folder}/${fileName}:/content`,
-          'PUT',
-          binary,
-          'image/png'
-        );
-
-        await Promise.all(currentEvent.rowIds.map(id =>
-          callGraph(
-            `/sites/${SITE_PATH}/lists/${LIST_ID}/items/${id}`,
-            'PATCH',
-            { fields: { IsSigned: true } }
-          )
-        ));
-
-        $('#loading').hide();
-        $('#complete-overlay').css('display', 'flex');
-      } catch (e) {
-        console.error(e);
-        $('#loading').hide();
-        showMessage('保存エラー: ' + (e.message || e));
-      }
-    });
-
-    window.addEventListener('resize', () => {
-      if ($('#signature-screen').is(':visible')) resizeCanvas();
-    });
-  </script>
+  window.addEventListener('resize', () => {
+    if ($('#signature-screen').style.display !== 'none') resizeCanvas();
+  });
+</script>
 </body>
 </html>
