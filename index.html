@@ -5,8 +5,14 @@
   <base target="_top">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
-  <!-- MSAL -->
-  <script src="https://alcdn.msauth.net/browser/2.39.0/js/msal-browser.min.js"></script>
+  <!-- MSAL: 404になる版(2.39.0)ではなく、存在が確認されている版に変更 -->
+  <script src="https://alcdn.msauth.net/browser/2.35.0/js/msal-browser.min.js"></script>
+  <script>
+    // フォールバック（MS公式の別リージョンCDN） :contentReference[oaicite:2]{index=2}
+    if (typeof msal === 'undefined') {
+      document.write("<script src='https://alcdn.msftauth.net/browser/2.35.0/js/msal-browser.min.js'><\/script>");
+    }
+  </script>
 
   <title>実施確認サイン</title>
   <style>
@@ -41,7 +47,7 @@
 
     .loading { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.85); display: none; justify-content: center; align-items: center; z-index: 1000; font-size: 1.1em; color: #3a3a3c; }
 
-    /* ★診断表示（必ず出る） */
+    /* 診断表示 */
     #statusBox {
       position: fixed;
       left: 10px;
@@ -112,17 +118,10 @@
   const LIST_NAME   = 'EventList';
   const SIGN_FOLDER = '実施確認サイン';
 
-  // ================================================================
-  // UI Helpers
-  // ================================================================
   const $ = (sel) => document.querySelector(sel);
   const statusBox = $('#statusBox');
-  function logStatus(msg) {
-    statusBox.textContent += "\n" + msg;
-  }
-  function showLoading(on) {
-    $('#loading').style.display = on ? 'flex' : 'none';
-  }
+  function logStatus(msg) { statusBox.textContent += "\n" + msg; }
+  function showLoading(on) { $('#loading').style.display = on ? 'flex' : 'none'; }
   function goToTop() {
     $('#complete-overlay').style.display = 'none';
     $('#signature-screen').style.display = 'none';
@@ -130,21 +129,15 @@
     window.scrollTo(0, 0);
   }
 
-  // ================================================================
-  // Start
-  // ================================================================
   window.addEventListener('DOMContentLoaded', () => {
     statusBox.textContent = "起動: DOMContentLoaded";
     if (typeof window.msal === 'undefined') {
       logStatus("NG: msal が読み込めていません（msal is undefined）");
-      logStatus("→ 社内ネットワーク/拡張機能で alcdn.msauth.net がブロックされている可能性");
+      logStatus("→ CDNブロック or 取得失敗の可能性");
       return;
     }
     logStatus("OK: msal 読み込み確認");
-    startApp().catch(e => {
-      console.error(e);
-      logStatus("致命的エラー: " + (e.message || e));
-    });
+    startApp().catch(e => { console.error(e); logStatus("致命的エラー: " + (e.message || e)); });
   });
 
   // ================================================================
@@ -203,7 +196,7 @@
   }
 
   // ================================================================
-  // Data: resolve list id & load events
+  // Data
   // ================================================================
   let LIST_ID = null;
 
@@ -343,7 +336,6 @@
     }
   }
 
-  // UI events
   $('#done-btn').addEventListener('click', goToTop);
   $('#back-btn').addEventListener('click', goToTop);
 
